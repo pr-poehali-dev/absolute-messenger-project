@@ -15,7 +15,8 @@ export default function ChatList({ chats, activeChatId, onSelectChat, searchQuer
   const regular = chats.filter((c) => !c.pinned);
 
   const renderChat = (chat: Chat) => {
-    const lastMsg = chat.messages[chat.messages.length - 1];
+    const lastMsgFromHistory = chat.messages[chat.messages.length - 1];
+    const preview = lastMsgFromHistory || chat.lastMessage;
     const isActive = chat.id === activeChatId;
 
     return (
@@ -31,19 +32,19 @@ export default function ChatList({ chats, activeChatId, onSelectChat, searchQuer
         <Avatar user={chat.user} size="md" showStatus />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-0.5">
-            <span className={`text-sm font-semibold truncate ${isActive ? "text-foreground" : "text-foreground"}`}>
+            <span className="text-sm font-semibold truncate text-foreground">
               {chat.user.name}
             </span>
             <span className="text-[11px] text-muted-foreground flex-shrink-0 ml-1">
-              {lastMsg?.time || ""}
+              {preview?.time || ""}
             </span>
           </div>
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground truncate flex-1">
-              {lastMsg ? (
+              {preview ? (
                 <>
-                  {lastMsg.isOwn && <span className="mr-1">Вы:</span>}
-                  {lastMsg.text}
+                  {preview.isOwn && <span className="mr-1">Вы:</span>}
+                  {preview.text}
                 </>
               ) : (
                 <span className="italic">Нет сообщений</span>

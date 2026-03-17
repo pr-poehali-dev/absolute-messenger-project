@@ -51,7 +51,11 @@ function SettingRow({ icon, label, description, toggle, value, onChange, onClick
   );
 }
 
-export default function SettingsPanel() {
+interface SettingsPanelProps {
+  onLogout: () => void;
+}
+
+export default function SettingsPanel({ onLogout }: SettingsPanelProps) {
   const [notifications, setNotifications] = useState(true);
   const [sounds, setSounds] = useState(true);
   const [readReceipts, setReadReceipts] = useState(true);
@@ -89,7 +93,7 @@ export default function SettingsPanel() {
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-2">Аккаунт</p>
           <SettingRow icon="Key" label="Изменить пароль" onClick={() => {}} />
           <SettingRow icon="Download" label="Экспорт данных" description="Скачать историю переписки" onClick={() => {}} />
-          <SettingRow icon="LogOut" label="Выйти из аккаунта" danger onClick={() => {}} />
+          <SettingRow icon="LogOut" label="Выйти из аккаунта" danger onClick={onLogout} />
         </div>
 
         <p className="text-center text-xs text-muted-foreground py-2">Messenger v1.0.0</p>

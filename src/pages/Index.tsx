@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/messenger/Sidebar";
 import ChatList from "@/components/messenger/ChatList";
 import ChatWindow from "@/components/messenger/ChatWindow";
@@ -6,6 +6,7 @@ import ContactsPanel from "@/components/messenger/ContactsPanel";
 import SettingsPanel from "@/components/messenger/SettingsPanel";
 import ProfilePanel from "@/components/messenger/ProfilePanel";
 import AuthScreen from "@/components/messenger/AuthScreen";
+import { api } from "@/lib/api";
 
 export type Tab = "chats" | "contacts" | "settings" | "profile";
 
@@ -13,7 +14,7 @@ export interface User {
   id: string;
   name: string;
   username: string;
-  avatar?: string;
+  bio?: string;
   status: "online" | "offline" | "away";
   lastSeen?: string;
 }
@@ -32,128 +33,134 @@ export interface Chat {
   messages: Message[];
   unread: number;
   pinned?: boolean;
+  lastMessage?: { text: string; time: string; isOwn: boolean } | null;
 }
-
-const DEMO_CHATS: Chat[] = [
-  {
-    id: "1",
-    user: { id: "u1", name: "Алексей Петров", username: "alexey_p", status: "online" },
-    unread: 3,
-    pinned: true,
-    messages: [
-      { id: "m1", text: "Привет! Как дела?", time: "10:24", isOwn: false, status: "read" },
-      { id: "m2", text: "Всё отлично, спасибо! Работаю над новым проектом 🚀", time: "10:25", isOwn: true, status: "read" },
-      { id: "m3", text: "Звучит круто! Расскажи подробнее", time: "10:27", isOwn: false, status: "read" },
-      { id: "m4", text: "Это мессенджер с тёмной темой 😄", time: "10:28", isOwn: true, status: "delivered" },
-      { id: "m5", text: "Когда покажешь?", time: "10:30", isOwn: false, status: "read" },
-      { id: "m6", text: "Уже сейчас!", time: "10:31", isOwn: false, status: "read" },
-      { id: "m7", text: "Жду с нетерпением!", time: "10:32", isOwn: false, status: "read" },
-    ],
-  },
-  {
-    id: "2",
-    user: { id: "u2", name: "Мария Смирнова", username: "masha_s", status: "away" },
-    unread: 0,
-    messages: [
-      { id: "m1", text: "Документы отправила на почту", time: "Вчера", isOwn: false, status: "read" },
-      { id: "m2", text: "Получила, спасибо!", time: "Вчера", isOwn: true, status: "read" },
-    ],
-  },
-  {
-    id: "3",
-    user: { id: "u3", name: "Команда разработки", username: "dev_team", status: "online" },
-    unread: 12,
-    messages: [
-      { id: "m1", text: "Деплой прошёл успешно ✅", time: "09:15", isOwn: false, status: "read" },
-      { id: "m2", text: "Отлично! Проверяю прямо сейчас", time: "09:20", isOwn: true, status: "read" },
-      { id: "m3", text: "Есть небольшие правки по UI", time: "09:45", isOwn: false, status: "read" },
-    ],
-  },
-  {
-    id: "4",
-    user: { id: "u4", name: "Дмитрий Козлов", username: "dima_k", status: "offline", lastSeen: "2 часа назад" },
-    unread: 0,
-    messages: [
-      { id: "m1", text: "Встреча перенесена на пятницу", time: "Пн", isOwn: false, status: "read" },
-    ],
-  },
-  {
-    id: "5",
-    user: { id: "u5", name: "Анна Новикова", username: "anna_n", status: "online" },
-    unread: 1,
-    messages: [
-      { id: "m1", text: "Привет! Видела твой новый проект 🔥", time: "11:00", isOwn: false, status: "read" },
-    ],
-  },
-];
-
-const DEMO_CONTACTS: User[] = [
-  { id: "u1", name: "Алексей Петров", username: "alexey_p", status: "online" },
-  { id: "u5", name: "Анна Новикова", username: "anna_n", status: "online" },
-  { id: "u3", name: "Команда разработки", username: "dev_team", status: "online" },
-  { id: "u2", name: "Мария Смирнова", username: "masha_s", status: "away" },
-  { id: "u4", name: "Дмитрий Козлов", username: "dima_k", status: "offline", lastSeen: "2 часа назад" },
-  { id: "u6", name: "Игорь Васильев", username: "igor_v", status: "offline", lastSeen: "вчера" },
-  { id: "u7", name: "Светлана Орлова", username: "sveta_o", status: "online" },
-];
-
-const DEMO_ME: User = {
-  id: "me",
-  name: "Вы",
-  username: "my_account",
-  status: "online",
-};
 
 export default function Index() {
   const [isAuthed, setIsAuthed] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("chats");
-  const [chats, setChats] = useState<Chat[]>(DEMO_CHATS);
-  const [activeChatId, setActiveChatId] = useState<string | null>("1");
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [contacts, setContacts] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleAuth = (user: User) => {
+  const loadChats = useCallback(async () => {
+    try {
+      const data = await api.chats.list();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setChats((prev) => data.chats.map((c: any) => ({ ...c, messages: prev.find((p) => p.id === c.id)?.messages || [] })));
+    } catch (_e) { /* ignore */ }
+  }, []);
+
+  const loadContacts = useCallback(async () => {
+    try {
+      const data = await api.auth.getUsers();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setContacts(data.users.map((u: any) => ({ ...u, id: String(u.id) })));
+    } catch (_e) { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem("session_token");
+    if (!token) { setLoading(false); return; }
+    api.auth.me().then((data) => {
+      setCurrentUser({ ...data.user, id: String(data.user.id) });
+      setIsAuthed(true);
+      setLoading(false);
+    }).catch(() => {
+      localStorage.removeItem("session_token");
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthed) return;
+    loadChats();
+    loadContacts();
+    const interval = setInterval(() => { loadChats(); loadContacts(); }, 5000);
+    return () => clearInterval(interval);
+  }, [isAuthed, loadChats, loadContacts]);
+
+  useEffect(() => {
+    if (!activeChatId) return;
+    const loadMessages = async () => {
+      try {
+        const data = await api.messages.list(activeChatId);
+        setChats((prev) =>
+          prev.map((c) =>
+            c.id === activeChatId ? { ...c, messages: data.messages, unread: 0 } : c
+          )
+        );
+      } catch (_e) { /* ignore */ }
+    };
+    loadMessages();
+    const interval = setInterval(loadMessages, 3000);
+    return () => clearInterval(interval);
+  }, [activeChatId]);
+
+  const handleAuth = (user: User, token: string) => {
+    localStorage.setItem("session_token", token);
     setCurrentUser(user);
     setIsAuthed(true);
   };
 
-  const activeChat = chats.find((c) => c.id === activeChatId) || null;
-
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     if (!activeChatId || !text.trim()) return;
-    const newMsg: Message = {
-      id: `m${Date.now()}`,
-      text,
-      time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
-      isOwn: true,
-      status: "sent",
-    };
-    setChats((prev) =>
-      prev.map((c) =>
-        c.id === activeChatId ? { ...c, messages: [...c.messages, newMsg], unread: 0 } : c
-      )
-    );
+    try {
+      const data = await api.messages.send(activeChatId, text);
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === activeChatId
+            ? { ...c, messages: [...c.messages, data.message] }
+            : c
+        )
+      );
+    } catch (_e) { /* ignore */ }
   };
 
-  const handleOpenChat = (userId: string) => {
-    const existing = chats.find((c) => c.user.id === userId);
-    if (existing) {
-      setActiveChatId(existing.id);
-      setActiveTab("chats");
-    } else {
-      const contact = DEMO_CONTACTS.find((c) => c.id === userId);
-      if (!contact) return;
+  const handleOpenChat = async (userId: string) => {
+    try {
+      const existing = chats.find((c) => c.user.id === userId);
+      if (existing) {
+        setActiveChatId(existing.id);
+        setActiveTab("chats");
+        return;
+      }
+      const data = await api.chats.open(Number(userId));
       const newChat: Chat = {
-        id: `chat_${Date.now()}`,
-        user: contact,
+        id: data.chatId,
+        user: { ...data.user, id: String(data.user.id) },
         messages: [],
         unread: 0,
       };
       setChats((prev) => [newChat, ...prev]);
-      setActiveChatId(newChat.id);
+      setActiveChatId(data.chatId);
       setActiveTab("chats");
-    }
+    } catch (_e) { /* ignore */ }
   };
+
+  const handleUpdateProfile = async (updates: { name?: string; username?: string; bio?: string }) => {
+    const data = await api.auth.updateMe(updates);
+    setCurrentUser({ ...data.user, id: String(data.user.id) });
+  };
+
+  const handleLogout = async () => {
+    await api.auth.logout().catch(() => {});
+    localStorage.removeItem("session_token");
+    setIsAuthed(false);
+    setCurrentUser(null);
+    setChats([]);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen w-screen flex items-center justify-center bg-background">
+        <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!isAuthed) {
     return <AuthScreen onAuth={handleAuth} />;
@@ -163,13 +170,16 @@ export default function Index() {
     c.user.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const activeChat = chats.find((c) => c.id === activeChatId) || null;
+  const totalUnread = chats.reduce((acc, c) => acc + c.unread, 0);
+
   return (
     <div className="flex h-screen w-screen bg-background overflow-hidden animate-fade-in">
       <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        unreadCount={chats.reduce((acc, c) => acc + c.unread, 0)}
-        currentUser={currentUser || DEMO_ME}
+        unreadCount={totalUnread}
+        currentUser={currentUser!}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -189,10 +199,12 @@ export default function Index() {
           </>
         )}
         {activeTab === "contacts" && (
-          <ContactsPanel contacts={DEMO_CONTACTS} onOpenChat={handleOpenChat} />
+          <ContactsPanel contacts={contacts} onOpenChat={handleOpenChat} />
         )}
-        {activeTab === "settings" && <SettingsPanel />}
-        {activeTab === "profile" && <ProfilePanel user={currentUser || DEMO_ME} />}
+        {activeTab === "settings" && <SettingsPanel onLogout={handleLogout} />}
+        {activeTab === "profile" && (
+          <ProfilePanel user={currentUser!} onUpdate={handleUpdateProfile} />
+        )}
       </div>
     </div>
   );

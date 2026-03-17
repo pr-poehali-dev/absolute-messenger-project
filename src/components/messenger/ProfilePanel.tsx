@@ -5,17 +5,29 @@ import Icon from "@/components/ui/icon";
 
 interface ProfilePanelProps {
   user: User;
+  onUpdate: (updates: { name?: string; username?: string; bio?: string }) => Promise<void>;
 }
 
-export default function ProfilePanel({ user }: ProfilePanelProps) {
+export default function ProfilePanel({ user, onUpdate }: ProfilePanelProps) {
   const [name, setName] = useState(user.name);
   const [username, setUsername] = useState(user.username);
-  const [bio, setBio] = useState("Люблю общаться и создавать крутые проекты ✨");
+  const [bio, setBio] = useState(user.bio || "");
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await onUpdate({ name, username, bio });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка сохранения");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -26,12 +38,7 @@ export default function ProfilePanel({ user }: ProfilePanelProps) {
 
       <div className="flex-1 overflow-y-auto px-6 py-6 max-w-lg">
         <div className="flex flex-col items-center gap-4 mb-8">
-          <div className="relative">
-            <Avatar user={{ ...user, name }} size="lg" showStatus />
-            <button className="absolute bottom-0 right-0 w-6 h-6 bg-primary rounded-full flex items-center justify-center shadow-lg hover:bg-primary/90 transition-all">
-              <Icon name="Camera" size={12} className="text-white" />
-            </button>
-          </div>
+          <Avatar user={{ ...user, name }} size="lg" showStatus />
           <div className="text-center">
             <h3 className="text-xl font-bold text-foreground">{name || user.name}</h3>
             <p className="text-sm text-muted-foreground">@{username || user.username}</p>
@@ -70,23 +77,31 @@ export default function ProfilePanel({ user }: ProfilePanelProps) {
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 rows={3}
-                className="w-full bg-secondary border border-border rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-all resize-none"
+                placeholder="Расскажите о себе..."
+                className="w-full bg-secondary border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-all resize-none"
               />
             </div>
           </div>
 
+          {error && (
+            <p className="text-destructive text-xs flex items-center gap-1.5 px-1">
+              <Icon name="AlertCircle" size={14} />
+              {error}
+            </p>
+          )}
+
           <button
             onClick={handleSave}
-            className={`w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 ${
+            disabled={loading}
+            className={`w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 flex items-center justify-center gap-2 ${
               saved
                 ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                : "bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-60"
             }`}
           >
+            {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
             {saved ? (
-              <span className="flex items-center justify-center gap-2">
-                <Icon name="Check" size={16} /> Сохранено!
-              </span>
+              <><Icon name="Check" size={16} /> Сохранено!</>
             ) : "Сохранить изменения"}
           </button>
         </div>

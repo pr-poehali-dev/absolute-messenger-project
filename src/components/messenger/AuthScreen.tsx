@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { User } from "@/pages/Index";
 import Icon from "@/components/ui/icon";
+import { api } from "@/lib/api";
 
 interface AuthScreenProps {
-  onAuth: (user: User) => void;
+  onAuth: (user: User, token: string) => void;
 }
 
 export default function AuthScreen({ onAuth }: AuthScreenProps) {
@@ -12,8 +13,9 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -21,10 +23,23 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
       if (!name.trim()) { setError("Введите имя"); return; }
       if (!username.trim()) { setError("Введите никнейм"); return; }
       if (password.length < 4) { setError("Пароль минимум 4 символа"); return; }
-      onAuth({ id: "me", name, username, status: "online" });
     } else {
       if (!username.trim() || !password.trim()) { setError("Заполните все поля"); return; }
-      onAuth({ id: "me", name: username, username, status: "online" });
+    }
+
+    setLoading(true);
+    try {
+      let data;
+      if (mode === "register") {
+        data = await api.auth.register(username.trim().toLowerCase(), name.trim(), password);
+      } else {
+        data = await api.auth.login(username.trim().toLowerCase(), password);
+      }
+      onAuth({ ...data.user, id: String(data.user.id) }, data.token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка сервера");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -99,8 +114,10 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             )}
             <button
               type="submit"
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-xl transition-all active:scale-95 mt-2"
+              disabled={loading}
+              className="w-full bg-primary hover:bg-primary/90 disabled:opacity-60 text-primary-foreground font-semibold py-3 rounded-xl transition-all active:scale-95 mt-2 flex items-center justify-center gap-2"
             >
+              {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
               {mode === "login" ? "Войти" : "Создать аккаунт"}
             </button>
           </form>
